@@ -2,6 +2,10 @@
 
 ## Python script that tracks changes in the navidrome database to keep track of plays even after admins change media metadata
 
+## Current Functions
+
+- Simple tracking of media file ids to keep media plays across file changes
+
 ## Running the program
 
 ### Docker container
