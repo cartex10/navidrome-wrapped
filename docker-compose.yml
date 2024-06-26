@@ -1,0 +1,16 @@
+version: "3.7"
+volumes:
+  navidrome-wrapped:
+    name: navidrome-wrapped
+  navidrome-data:
+    external: true
+
+services:
+  navidrome-wrapped:
+    container_name: navidrome-wrapped
+    image: navidrome-wrapped:latest
+    restart: unless-stopped
+    #env_file: .env
+    volumes:
+      - navidrome-wrapped:/db
+      - navidrome-data:/navidrome

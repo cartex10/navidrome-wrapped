@@ -6,10 +6,6 @@
 
 - Simple tracking of media file ids to keep media plays across file changes
 
-## Planned Functions
-
-- Store amount of media plays everyday 
-
 ## Running the program
 
 ### Docker container
