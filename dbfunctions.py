@@ -187,11 +187,9 @@ def update_play_increase(con, media_id, user_id, mediatype, newval):
 		#cur = con.execute("UPDATE media_plays SET play_increase=? WHERE id=? AND user_id=? AND date=?")
 	con.commit()
 
-def update_db(con, song_id, col, val):#, table=0):
-	# Update one all_media table column, select by song_id, triggers should auto update fields in tracked_* tables
+def update_db(con, song_id, col, val):
+	# Update one all_media table column, select by song_id
 	cur = "UPDATE all_media SET "
-	#if table:
-	#	cur = "UPDATE all_media_temp SET "
 	if col == mediaDBEnum["song_id"]:
 		cur += "song_id=? WHERE song_id=?"
 		sync_song_ID(con, song_id, val)
@@ -267,11 +265,11 @@ def read_annotations_table(con):
 	return {"albums": retAlbum, "songs": retMediaFile, "artists": retArtist}
 
 def grabMetadata(con, song_id, table=0):
-	# Grab Metadata from all_media or temp
+	# Grab Metadata from all_media or navidromeDB.media_file
 	if table == 0:
 		cur = con.execute("SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media WHERE song_id=?", (song_id,))
 	elif table == 1:
-		cur = con.execute("SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media_temp WHERE song_id=?", (song_id,))
+		cur = con.execute("SELECT id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM navidromeDB.media_file WHERE id=?", (song_id,))
 	fetch = cur.fetchall()[0]
 	return {"song_id": fetch[0], "album_id": fetch[1], "artist_id": fetch[2], "path": fetch[3], "title": fetch[4], "album": fetch[5], "artist": fetch[6], "track_number": fetch[7], "created": fetch[8], "genre": fetch[9]}
 
