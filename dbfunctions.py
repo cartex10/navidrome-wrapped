@@ -119,7 +119,7 @@ def check_for_db_changes(con):
 	{"updated_value": "ID Only", "sql": "o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.genre = n.genre AND o.path = n.path"} ]
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
-		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + " AND o.song_id != n.id;")
+		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + ";")
 		fetch = cur.fetchall()
 		if len(fetch) > 0:
 			for i in fetch:
