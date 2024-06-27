@@ -20,21 +20,26 @@ class mediaDBEnum(Enum):
 	created = 8,
 	genre = 9
 
+class typeEnum(Enum):
+	song = 0,
+	album = 1,
+	artist = 2
+
 def create_connection():
 	# Create folder for database if it does not exist, then connect to/create db
 	if not os.path.exists("db"):
 		os.makedirs("db")
 	con = sqlite3.connect(wrappedDBPath)
 	# Check for tables with correct cells, create if they don't exist
-	table_checks = ["SELECT song_id, user_id, title, album, artist, play_count, starred, created FROM tracked_songs",
-		"SELECT album_id, user_id, album, play_count, starred, created FROM tracked_albums",
-		"SELECT artist_id, user_id, artist, album_count, song_count, play_count, starred, created FROM tracked_artists",
+	table_checks = ["SELECT song_id, user_id, play_count, starred FROM tracked_songs",
+		"SELECT album_id, user_id, play_count, starred FROM tracked_albums",
+		"SELECT artist_id, user_id, play_count, starred FROM tracked_artists",
 		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created , genre FROM all_media",
 		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created , genre FROM all_media_temp",
 		"SELECT id, media_type, user_id, date, play_increase FROM media_plays" ]
-	table_strings = ["CREATE TABLE tracked_songs (song_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, title TEXT, album TEXT, artist TEXT, play_count INT, starred BOOL, created DATE);",
-		"CREATE TABLE tracked_albums (album_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, album TEXT, play_count INT, starred BOOL, created DATE);",
-		"CREATE TABLE tracked_artists (artist_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, artist TEXT, album_count INT, song_count INT, play_count INT, starred BOOL, created DATE);",
+	table_strings = ["CREATE TABLE tracked_songs (song_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
+		"CREATE TABLE tracked_albums (album_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
+		"CREATE TABLE tracked_artists (artist_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
 		"CREATE TABLE all_media (song_id TEXT PRIMARY KEY NOT NULL, album_id TEXT, artist_id TEXT, path TEXT, title TEXT, album TEXT, artist TEXT, track_number INT, created DATE, genre TEXT);",
 		"CREATE TABLE all_media_temp (song_id TEXT PRIMARY KEY NOT NULL, album_id TEXT, artist_id TEXT, path TEXT, title TEXT, album TEXT, artist TEXT, track_number INT, created DATE, genre TEXT);",
 		"CREATE TABLE media_plays (id TEXT PRIMARY KEY NOT NULL, media_type TEXT, user_id TEXT, date DATE, play_increase INT);" ]
@@ -61,13 +66,22 @@ def check_db_status(con):
 	# Else, check for changes between wrapped db and navidrome db
 	else:
 		check_for_db_changes(con)
+		check_for_media_plays(con)
 		
 def full_db_sync(con):
 	media = read_mediafile_table()
+	# Add all media file metadata to db
 	for file in media:
 		cur = con.execute("INSERT INTO all_media VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (file['song_id'], file['album_id'], file['artist_id'], file['path'], file['title'], file['album'], file['artist'], file['track_number'], file['created'], file['genre']) )
+	media = read_annotations_table()
+	# Add all annotation metadata to appropriate tables in db
+	for file in media["albums"]:
+		cur = con.execute("INSERT INTO tracked_albums VALUES (?, ?, ?, ?)", (file["album_id"], file["user_id"], file["play_count"], file["starred"]) )
+	for file in media["songs"]:
+		cur = con.execute("INSERT INTO tracked_songs VALUES (?, ?, ?, ?)", (file["song_id"], file["user_id"], file["play_count"], file["starred"]) )
+	for file in media["artists"]:
+		cur = con.execute("INSERT INTO tracked_artists VALUES (?, ?, ?, ?)", (file["artist_id"], file["user_id"], file["play_count"], file["starred"]) )
 	con.commit()
-	# Annotations table copy goes here
 
 def check_for_db_changes(con):
 	# Copy navidrome media file db into temp media db
@@ -118,8 +132,10 @@ def check_for_db_changes(con):
 				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
 	# Clear temp db
 	cur = con.execute("DELETE FROM all_media_temp;")
-	# Copy all data from annotations table (navidrome.db) into appropriate tracked_* tables (wrapped.db)
 	con.commit()
+
+def check_for_media_plays(con):
+	pass
 
 def update_db(con, song_id, col, val):#, table=0):
 	# Update one all_media table column, select by song_id, triggers should auto update fields in tracked_* tables
@@ -128,6 +144,7 @@ def update_db(con, song_id, col, val):#, table=0):
 	#	cur = "UPDATE all_media_temp SET "
 	if col == mediaDBEnum["song_id"]:
 		cur += "song_id=? WHERE song_id=?"
+		sync_song_ID(con, song_id, val)
 	elif col == mediaDBEnum["album_id"]:
 		cur += "album_id=? WHERE song_id=?"
 	elif col == mediaDBEnum["artist_id"]:
@@ -149,18 +166,28 @@ def update_db(con, song_id, col, val):#, table=0):
 	cur = con.execute(cur, (val, song_id))
 	con.commit()
 
+def sync_song_ID(con, oldval, newval):
+	# Sync tracked_songs table when song_id changes (should always run after changes to all_media song_id)
+	cur = con.execute("SELECT song_id FROM tracked_songs WHERE song_id=?", (oldval,))
+	if len(cur.fetchall()) > 0:
+		cur = con.execute("UPDATE tracked_songs SET song_id=? WHERE song_id=?", (newval, oldval))
+		con.commit()
+		string = "Sync ID of song in tracked_songs table\n\t["
+		string += oldval + "] OLD\n\n\t[" + newval + "] NEW\n\n"
+		printBoth(string)
+
 def read_mediafile_table():
 	navidromeCon = navidrome_connection()
 	cur = navidromeCon.execute("SELECT \
-		id,\
-		path,\
-		title,\
-		album,\
-		artist,\
-		artist_id,\
-		track_number,\
-		genre,\
-		created_at,\
+		id, \
+		path, \
+		title, \
+		album, \
+		artist, \
+		artist_id, \
+		track_number, \
+		genre, \
+		created_at, \
 		album_id \
 		FROM media_file")
 	ret = []
@@ -173,9 +200,23 @@ def read_mediafile_table():
 def read_annotations_table():
 	navidromeCon = navidrome_connection()
 	cur = navidromeCon.execute("SELECT \
-		item_id,\
-		item_type \
+		item_type,\
+		item_id, \
+		user_id, \
+		play_count, \
+		starred \
 		FROM annotation")
+	retAlbum = []
+	retMediaFile = []
+	retArtist = []
+	for i in cur.fetchall():
+		if i[0] == "album":
+			retAlbum.append({"album_id": i[1], "user_id": i[2], "play_count": i[3], "starred": i[4]})
+		elif i[0] == "media_file":
+			retMediaFile.append({"song_id": i[1], "user_id": i[2], "play_count": i[3], "starred": i[4]})
+		elif i[0] == "artist":
+			retArtist.append({"artist_id": i[1], "user_id": i[2], "play_count": i[3], "starred": i[4]})
+	return {"albums": retAlbum, "songs": retMediaFile, "artists": retArtist}
 
 def grabMetadata(con, song_id, table=0):
 	# Grab Metadata from all_media or temp
