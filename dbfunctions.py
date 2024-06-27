@@ -57,7 +57,7 @@ def check_db_status(con):
 	# If empty/new db, do initial full sync
 	cur = con.execute("SELECT * from all_media")
 	if len(cur.fetchall()) == 0:
-		printBoth("No media metadata detected, starting full sync")
+		printBoth("No media metadata detected, starting full sync\n\n")
 		full_db_sync(con)
 	# Else, check for changes between wrapped db and navidrome db
 	else:
@@ -286,7 +286,7 @@ def printToLog(string):
 	with open(wrappedLogPath, "a") as file:
 		file.write(string)
 
-def printBoth(string, datePrint=False):
+def printBoth(string, datePrint=True):
 	if datePrint:
 		now = datetime.now(tz=ZoneInfo("America/New_York"))
 		string = now.strftime('[%a, %B %d, %Y @ %H:%M:%S %Z] :\t ') + str(string) + "\n"
