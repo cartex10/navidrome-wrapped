@@ -115,8 +115,7 @@ def check_for_db_changes(con):
 	{"updated_value": "Track Number", "sql": "o.track_number != n.track_number AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.path = n.path"},
 	{"updated_value": "Artist", "sql": "o.artist_id != n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
 	{"updated_value": "Album", "sql": "o.album_id != n.album_id AND o.artist_id = n.artist_id AND o.track_number = n.track_number AND o.genre = n.genre"},
-	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"},
-	{"updated_value": "ID Only", "sql": "o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.genre = n.genre AND o.path = n.path"} ]
+	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"} ]
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
 		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + ";")
@@ -148,8 +147,6 @@ def check_for_db_changes(con):
 				elif jc["updated_value"] == "Path":
 					# Updated path (same title/artist/album/track_number)
 					update_db(con, i[0], mediaDBEnum["path"], meta["path"])
-				#elif jc["updated_value"] == "ID Only":
-					# Final check for updated id only (error correction) (same title/artist/album/track_number/genre/path)
 				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
 	con.commit()
 
