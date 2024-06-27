@@ -34,15 +34,13 @@ def create_connection():
 	table_checks = ["SELECT song_id, user_id, play_count, starred FROM tracked_songs",
 		"SELECT album_id, user_id, play_count, starred FROM tracked_albums",
 		"SELECT artist_id, user_id, play_count, starred FROM tracked_artists",
-		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media",
-		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media_temp",
-		"SELECT id, media_type, user_id, date, play_increase FROM media_plays" ]
-	table_strings = ["CREATE TABLE tracked_songs (song_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
-		"CREATE TABLE tracked_albums (album_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
-		"CREATE TABLE tracked_artists (artist_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
-		"CREATE TABLE all_media (song_id TEXT PRIMARY KEY NOT NULL, album_id TEXT, artist_id TEXT, path TEXT, title TEXT, album TEXT, artist TEXT, track_number INT, created DATE, genre TEXT);",
-		"CREATE TABLE all_media_temp (song_id TEXT PRIMARY KEY NOT NULL, album_id TEXT, artist_id TEXT, path TEXT, title TEXT, album TEXT, artist TEXT, track_number INT, created DATE, genre TEXT);",
-		"CREATE TABLE media_plays (id TEXT PRIMARY KEY NOT NULL, media_type TEXT, user_id TEXT, date DATE, play_increase INT);" ]
+		"SELECT album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media",
+		"SELECT media_id, media_type, user_id, date, play_increase FROM media_plays" ]
+	table_strings = ["CREATE TABLE tracked_songs (song_id TEXT, user_id TEXT, play_count INT, starred BOOL);",
+		"CREATE TABLE tracked_albums (album_id TEXT, user_id TEXT, play_count INT, starred BOOL);",
+		"CREATE TABLE tracked_artists (artist_id TEXT, user_id TEXT, play_count INT, starred BOOL);",
+		"CREATE TABLE all_media (song_id TEXT PRIMARY KEY, album_id TEXT, artist_id TEXT, path TEXT, title TEXT, album TEXT, artist TEXT, track_number INT, created DATE, genre TEXT);",
+		"CREATE TABLE media_plays (media_id TEXT, media_type TEXT, user_id TEXT, date DATE, play_increase INT);" ]
 	for i in range(len(table_checks)):
 		try:
 			cur = con.execute(table_checks[i])
@@ -70,15 +68,45 @@ def full_db_sync(con):
 	media = read_mediafile_table(con)
 	# Add all media file metadata to db
 	for file in media:
-		cur = con.execute("INSERT INTO all_media VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (file['song_id'], file['album_id'], file['artist_id'], file['path'], file['title'], file['album'], file['artist'], file['track_number'], file['created'], file['genre']) )
+		cur = con.execute("INSERT INTO all_media \
+			(song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre) VALUES \
+			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
+			(file['song_id'], \
+			file['album_id'], \
+			file['artist_id'], \
+			file['path'], \
+			file['title'], \
+			file['album'], \
+			file['artist'], \
+			file['track_number'], \
+			file['created'], \
+			file['genre']) )
 	media = read_annotations_table(con)
 	# Add all annotation metadata to appropriate tables in db
 	for file in media["albums"]:
-		cur = con.execute("INSERT INTO tracked_albums VALUES (?, ?, ?, ?)", (file["album_id"], file["user_id"], file["play_count"], file["starred"]) )
+		cur = con.execute("INSERT INTO tracked_albums \
+			(album_id, user_id, play_count, starred) VALUES \
+			(?, ?, ?, ?)", \
+			(file["album_id"], \
+			file["user_id"], \
+			file["play_count"], \
+			file["starred"]) )
 	for file in media["songs"]:
-		cur = con.execute("INSERT INTO tracked_songs VALUES (?, ?, ?, ?)", (file["song_id"], file["user_id"], file["play_count"], file["starred"]) )
+		cur = con.execute("INSERT INTO tracked_songs \
+			(song_id, user_id, play_count, starred) VALUES \
+			(?, ?, ?, ?)", \
+			(file["song_id"], \
+			file["user_id"], \
+			file["play_count"], \
+			file["starred"]) )
 	for file in media["artists"]:
-		cur = con.execute("INSERT INTO tracked_artists VALUES (?, ?, ?, ?)", (file["artist_id"], file["user_id"], file["play_count"], file["starred"]) )
+		cur = con.execute("INSERT INTO tracked_artists \
+			(artist_id, user_id, play_count, starred) VALUES \
+			(?, ?, ?, ?)", \
+			(file["artist_id"], \
+			file["user_id"], \
+			file["play_count"], \
+			file["starred"]) )
 	con.commit()
 
 def check_for_db_changes(con):
@@ -91,7 +119,7 @@ def check_for_db_changes(con):
 	{"updated_value": "ID Only", "sql": "o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.genre = n.genre AND o.path = n.path"} ]
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
-		cur = con.execute("SELECT o.song_id, n.song_id FROM navidromeDB n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + " AND o.song_id != n.song_id;")
+		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + " AND o.song_id != n.id;")
 		fetch = cur.fetchall()
 		if len(fetch) > 0:
 			for i in fetch:
@@ -123,12 +151,41 @@ def check_for_db_changes(con):
 				#elif jc["updated_value"] == "ID Only":
 					# Final check for updated id only (error correction) (same title/artist/album/track_number/genre/path)
 				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
-	# Clear temp db
-	cur = con.execute("DELETE FROM all_media_temp;")
 	con.commit()
 
 def check_for_media_plays(con):
-	pass
+	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count FROM navidromeDB.annotation n INNER JOIN tracked_songs o ON o.song_id = n.item_id AND o.play_count != n.play_count AND o.user_id = n.user_id AND n.item_type='media_file'")
+	fetch = cur.fetchall()
+	if len(fetch) > 0:
+		for i in fetch:
+			if i[2] < i[3]:
+				update_play_increase(con, i[0], i[1], typeEnum["song"], i[3] - i[2])
+			elif i[2] > i[3]:
+				update_play_increase(con, i[0], i[1], typeEnum["song"], i[3])
+			update_play_count(con, i[0], i[1], typeEnum["song"], i[3])
+		printBoth("Updated play counts of " + str(len(fetch)) + " media files.\n")
+
+def update_play_count(con, media_id, user_id, mediatype, newval):
+	if mediatype == typeEnum["song"]:
+		cur = con.execute("UPDATE tracked_songs SET play_count=? WHERE song_id=? AND user_id=?", (newval, media_id, user_id))
+	con.commit()
+
+def update_play_increase(con, media_id, user_id, mediatype, newval):
+	now = datetime.now(tz=ZoneInfo("America/New_York"))
+	today = now.strftime("%Y-%m-%d")
+	if mediatype == typeEnum["song"]:
+		cur = con.execute("SELECT play_increase FROM media_plays WHERE media_id=? AND user_id=? AND date=?", (media_id, user_id, today))
+		fetch = cur.fetchall()
+		if len(fetch) == 1:
+			inc = fetch[0][0] + newval
+			cur = con.execute("UPDATE media_plays SET play_increase=? WHERE media_id=? AND user_id=? AND date=?", (inc, media_id, user_id, today))
+		elif len(fetch) == 0:
+			cur = con.execute("INSERT INTO media_plays \
+				(media_id, media_type, user_id, date, play_increase) VALUES (?, 'media_file', ?, ?, ?)", (media_id, user_id, today, newval))
+		else:
+			printBoth("Too many ")
+		#cur = con.execute("UPDATE media_plays SET play_increase=? WHERE id=? AND user_id=? AND date=?")
+	con.commit()
 
 def update_db(con, song_id, col, val):#, table=0):
 	# Update one all_media table column, select by song_id, triggers should auto update fields in tracked_* tables
@@ -231,8 +288,9 @@ def printToLog(string):
 	with open(wrappedLogPath, "a") as file:
 		file.write(string)
 
-def printBoth(string):
-	now = datetime.now(tz=ZoneInfo("America/New_York"))
-	string = now.strftime('[%a, %B %d, %Y @ %H:%M:%S %Z] :\t ') + str(string) + "\n"
+def printBoth(string, datePrint=False):
+	if datePrint:
+		now = datetime.now(tz=ZoneInfo("America/New_York"))
+		string = now.strftime('[%a, %B %d, %Y @ %H:%M:%S %Z] :\t ') + str(string) + "\n"
 	printToLog(string)
 	print(string)
