@@ -34,8 +34,8 @@ def create_connection():
 	table_checks = ["SELECT song_id, user_id, play_count, starred FROM tracked_songs",
 		"SELECT album_id, user_id, play_count, starred FROM tracked_albums",
 		"SELECT artist_id, user_id, play_count, starred FROM tracked_artists",
-		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created , genre FROM all_media",
-		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created , genre FROM all_media_temp",
+		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media",
+		"SELECT song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre FROM all_media_temp",
 		"SELECT id, media_type, user_id, date, play_increase FROM media_plays" ]
 	table_strings = ["CREATE TABLE tracked_songs (song_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
 		"CREATE TABLE tracked_albums (album_id TEXT PRIMARY KEY NOT NULL, user_id TEXT, play_count INT, starred BOOL);",
@@ -48,14 +48,12 @@ def create_connection():
 			cur = con.execute(table_checks[i])
 		except:
 			cur = con.execute(table_strings[i])
+	# Attach to Navidrome db
+	cur = con.execute("ATTACH DATABASE '" + navidromeDBPath + "' AS navidromeDB;")
 	# Check for correct indexes, create if they don't exist
 	#index
 	#con.commit()
 	return con
-
-def navidrome_connection():
-	# Connect to navidrome database
-	return sqlite3.connect(navidromeDBPath)
 
 def check_db_status(con):
 	# If empty/new db, do initial full sync
@@ -69,11 +67,11 @@ def check_db_status(con):
 		check_for_media_plays(con)
 		
 def full_db_sync(con):
-	media = read_mediafile_table()
+	media = read_mediafile_table(con)
 	# Add all media file metadata to db
 	for file in media:
 		cur = con.execute("INSERT INTO all_media VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (file['song_id'], file['album_id'], file['artist_id'], file['path'], file['title'], file['album'], file['artist'], file['track_number'], file['created'], file['genre']) )
-	media = read_annotations_table()
+	media = read_annotations_table(con)
 	# Add all annotation metadata to appropriate tables in db
 	for file in media["albums"]:
 		cur = con.execute("INSERT INTO tracked_albums VALUES (?, ?, ?, ?)", (file["album_id"], file["user_id"], file["play_count"], file["starred"]) )
@@ -84,11 +82,6 @@ def full_db_sync(con):
 	con.commit()
 
 def check_for_db_changes(con):
-	# Copy navidrome media file db into temp media db
-	media = read_mediafile_table()
-	for file in media:
-		cur = con.execute("INSERT INTO all_media_temp VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (file['song_id'], file['album_id'], file['artist_id'], file['path'], file['title'], file['album'], file['artist'], file['track_number'], file['created'], file['genre']) )
-	con.commit()
 	# Complete multiple sql inner joins to check for updated metadata from media_file (navidrome.db) in all_media (wrapped.db)
 	joinClauses = [{"updated_value": "Genre", "sql": "o.genre != n.genre AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
 	{"updated_value": "Track Number", "sql": "o.track_number != n.track_number AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.path = n.path"},
@@ -98,7 +91,7 @@ def check_for_db_changes(con):
 	{"updated_value": "ID Only", "sql": "o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.genre = n.genre AND o.path = n.path"} ]
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
-		cur = con.execute("SELECT o.song_id, n.song_id FROM all_media_temp n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + " AND o.song_id != n.song_id;")
+		cur = con.execute("SELECT o.song_id, n.song_id FROM navidromeDB n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + " AND o.song_id != n.song_id;")
 		fetch = cur.fetchall()
 		if len(fetch) > 0:
 			for i in fetch:
@@ -176,9 +169,8 @@ def sync_song_ID(con, oldval, newval):
 		string += oldval + "] OLD\n\n\t[" + newval + "] NEW\n\n"
 		printBoth(string)
 
-def read_mediafile_table():
-	navidromeCon = navidrome_connection()
-	cur = navidromeCon.execute("SELECT \
+def read_mediafile_table(con):
+	cur = con.execute("SELECT \
 		id, \
 		path, \
 		title, \
@@ -189,7 +181,7 @@ def read_mediafile_table():
 		genre, \
 		created_at, \
 		album_id \
-		FROM media_file")
+		FROM navidromeDB.media_file")
 	ret = []
 	for file in cur.fetchall():
 		ret2 = {"song_id": file[0], "path": file[1], "title": file[2], "album": file[3], "artist": file[4], "artist_id": file[5], "track_number": file[6], "genre": file[7], "album_id": file[9]}
@@ -197,15 +189,14 @@ def read_mediafile_table():
 		ret.append(ret2)
 	return ret
 
-def read_annotations_table():
-	navidromeCon = navidrome_connection()
-	cur = navidromeCon.execute("SELECT \
+def read_annotations_table(con):
+	cur = con.execute("SELECT \
 		item_type,\
 		item_id, \
 		user_id, \
 		play_count, \
 		starred \
-		FROM annotation")
+		FROM navidromeDB.annotation")
 	retAlbum = []
 	retMediaFile = []
 	retArtist = []
