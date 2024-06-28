@@ -6,7 +6,7 @@ from pathlib import Path
 
 wrappedDBPath = "db/wrapped.db"
 wrappedLogPath = "db/wrapped.log"
-navidromeDBPath = "navidrome/navidrome.db"
+navidromeDBPath = "navidrome/navidrome2.db"
 
 class mediaDBEnum(Enum):
 	song_id = 0, 
@@ -68,10 +68,7 @@ def full_db_sync(con):
 	media = read_mediafile_table(con)
 	# Add all media file metadata to db
 	for file in media:
-		cur = con.execute("INSERT INTO all_media \
-			(song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre) VALUES \
-			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
-			(file['song_id'], \
+		insert_media_entry(con, file['song_id'], \
 			file['album_id'], \
 			file['artist_id'], \
 			file['path'], \
@@ -80,7 +77,7 @@ def full_db_sync(con):
 			file['artist'], \
 			file['track_number'], \
 			file['created'], \
-			file['genre']) )
+			file['genre'])
 	media = read_annotations_table(con)
 	# Add all annotation metadata to appropriate tables in db
 	for file in media["albums"]:
@@ -116,6 +113,7 @@ def check_for_db_changes(con):
 	{"updated_value": "Artist", "sql": "o.artist_id != n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
 	{"updated_value": "Album", "sql": "o.album_id != n.album_id AND o.artist_id = n.artist_id AND o.track_number = n.track_number AND o.genre = n.genre"},
 	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"} ]
+	# ADD TITLE ?
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
 		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + ";")
@@ -148,8 +146,19 @@ def check_for_db_changes(con):
 					# Updated path (same title/artist/album/track_number)
 					update_db(con, i[0], mediaDBEnum["path"], meta["path"])
 				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
-	con.commit()
-
+	# Check for new media files
+	cur = con.execute("SELECT n.id, o.song_id, n.album_id, n.artist_id, n.path, n.title, n.album, n.artist, n.track_number, n.created_at, n.genre FROM navidromeDB.media_file n LEFT JOIN all_media o ON o.album_id = n.album_id AND o.title = n.title AND o.artist_id = n.artist_id AND o.path = n.path AND o.track_number = n.track_number")
+	count = 0
+	for i in cur.fetchall():
+		try:
+			if i[1] == None:
+				insert_media_entry(con, i[0], i[2], i[3], i[4], i[5], i[6], i[7], i[8], i[9].split('T')[0], i[10])
+				count += 1
+		except:
+			printBoth("Failed to add new song to all_media\n" + stringMetadata(con, i[0], 1))
+	if count > 0:
+		printBoth(str(count) + " new media files found.\n\n")
+	
 def check_for_media_plays(con):
 	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count FROM navidromeDB.annotation n INNER JOIN tracked_songs o ON o.song_id = n.item_id AND o.play_count != n.play_count AND o.user_id = n.user_id AND n.item_type='media_file'")
 	fetch = cur.fetchall()
@@ -182,6 +191,22 @@ def update_play_increase(con, media_id, user_id, mediatype, newval):
 		else:
 			printBoth("Too many ")
 		#cur = con.execute("UPDATE media_plays SET play_increase=? WHERE id=? AND user_id=? AND date=?")
+	con.commit()
+
+def insert_media_entry(con, song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre):
+	cur = con.execute("INSERT INTO all_media \
+		(song_id, album_id, artist_id, path, title, album, artist, track_number, created, genre) VALUES \
+		(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", \
+		(song_id, \
+		album_id, \
+		artist_id, \
+		path, \
+		title, \
+		album, \
+		artist, \
+		track_number, \
+		created, \
+		genre) )
 	con.commit()
 
 def update_db(con, song_id, col, val):

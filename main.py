@@ -11,7 +11,3 @@ if __name__ == "__main__":
 		print(now.strftime('[%a, %B %d, %Y @ %H:%M:%S %Z] :\t ') + "Checking db for updates...\n")
 		check_db_status(con)
 		time.sleep(1)
-		# Need to store last checked date in db, if new day, check play_count differences, store in media_plays db
-		# To adjust for navidrome deleting play count, check every play count every loop,
-
-		# also need to account for adding new songs
