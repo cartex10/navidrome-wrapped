@@ -6,7 +6,7 @@ from pathlib import Path
 
 wrappedDBPath = "db/wrapped.db"
 wrappedLogPath = "db/wrapped.log"
-navidromeDBPath = "navidrome/navidrome2.db"
+navidromeDBPath = "navidrome/navidrome.db"
 
 class mediaDBEnum(Enum):
 	song_id = 0, 
