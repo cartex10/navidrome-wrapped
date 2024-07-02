@@ -157,29 +157,113 @@ def check_for_db_changes(con):
 		except:
 			printBoth("Failed to add new song to all_media\n" + stringMetadata(con, i[0], 1))
 	if count > 0:
-		printBoth(str(count) + " new media files found.\n\n")
+		printBoth(str(count) + " new media file(s) found.\n")
 	
 def check_for_media_plays(con):
-	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count FROM navidromeDB.annotation n INNER JOIN tracked_songs o ON o.song_id = n.item_id AND o.play_count != n.play_count AND o.user_id = n.user_id AND n.item_type='media_file'")
+	# Joins navidrome annotations table and wrapped tracked_* tables, adds new entries to appropriate tables 
+	# Updates play counts of media_files/songs in wrapped tracked_songs table
+	insertCount = 0
+	updateCount = 0
+	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count, n.starred FROM navidromeDB.annotation n LEFT JOIN tracked_songs o ON (o.song_id = n.item_id AND o.user_id = n.user_id) WHERE n.item_type='media_file'")
 	fetch = cur.fetchall()
-	if len(fetch) > 0:
-		for i in fetch:
-			if i[2] < i[3]:
+	doPrint = False
+	for i in fetch:
+		if i[2] == None:
+			insert_play_count(con, i[0], i[1], typeEnum["song"], i[3], i[4])
+			insertCount += 1
+		else:
+			if i[2] == i[3]:
+				continue
+			elif i[2] < i[3]:
+				# If new plays have been registered
 				update_play_increase(con, i[0], i[1], typeEnum["song"], i[3] - i[2])
 			elif i[2] > i[3]:
+				# If plays have been reset, assuming not lowered
 				update_play_increase(con, i[0], i[1], typeEnum["song"], i[3])
-			update_play_count(con, i[0], i[1], typeEnum["song"], i[3])
-		printBoth("Updated play counts of " + str(len(fetch)) + " media files.\n")
+			update_play_count(con, i[0], i[1], typeEnum["song"], i[3], i[4])
+			updateCount += 1
+			doPrint = True
+	if doPrint:
+		printBoth("Added " + str(insertCount) + " new media file user data entry(s).\n")
+		printBoth("Updated user data of " + str(updateCount) + " media file(s).\n")
+	# albums
+	insertCount = 0
+	updateCount = 0
+	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count, n.starred FROM navidromeDB.annotation n LEFT JOIN tracked_albums o ON (o.album_id = n.item_id AND o.user_id = n.user_id) WHERE n.item_type='album'")
+	fetch = cur.fetchall()
+	doPrint = False
+	for i in fetch:
+		if i[2] == None:
+			insert_play_count(con, i[0], i[1], typeEnum["album"], i[3], i[4])
+			insertCount += 1
+		else:
+			if i[2] == i[3]:
+				continue
+			elif i[2] < i[3]:
+				# If new plays have been registered
+				update_play_increase(con, i[0], i[1], typeEnum["album"], i[3] - i[2])
+			elif i[2] > i[3]:
+				# If plays have been reset, assuming not lowered
+				update_play_increase(con, i[0], i[1], typeEnum["album"], i[3])
+			update_play_count(con, i[0], i[1], typeEnum["album"], i[3], i[4])
+			updateCount += 1
+			doPrint = True
+	if doPrint:
+		printBoth("Added " + str(insertCount) + " new album user data entry(s).\n")
+		printBoth("Updated user data of " + str(updateCount) + " album(s).\n")
+	# artists
+	insertCount = 0
+	updateCount = 0
+	cur = con.execute("SELECT n.item_id, n.user_id, o.play_count, n.play_count, n.starred FROM navidromeDB.annotation n LEFT JOIN tracked_artists o ON (o.artist_id = n.item_id AND o.user_id = n.user_id) WHERE n.item_type='artist'")
+	fetch = cur.fetchall()
+	doPrint = False
+	for i in fetch:
+		if i[2] == None:
+			insert_play_count(con, i[0], i[1], typeEnum["artist"], i[3], i[4])
+			insertCount += 1
+		else:
+			if i[2] == i[3]:
+				continue
+			elif i[2] < i[3]:
+				# If new plays have been registered
+				update_play_increase(con, i[0], i[1], typeEnum["artist"], i[3] - i[2])
+			elif i[2] > i[3]:
+				# If plays have been reset, assuming not lowered
+				update_play_increase(con, i[0], i[1], typeEnum["artist"], i[3])
+			update_play_count(con, i[0], i[1], typeEnum["artist"], i[3], i[4])
+			updateCount += 1
+			doPrint = True
+	if doPrint:
+		printBoth("Added " + str(insertCount) + " new artist user data entry(s).\n")
+		printBoth("Updated user data of " + str(updateCount) + " artist(s).\n")
 
-def update_play_count(con, media_id, user_id, mediatype, newval):
-	if mediatype == typeEnum["song"]:
-		cur = con.execute("UPDATE tracked_songs SET play_count=? WHERE song_id=? AND user_id=?", (newval, media_id, user_id))
-	con.commit()
-
-def update_play_increase(con, media_id, user_id, mediatype, newval):
+def insert_play_count(con, media_id, user_id, media_type, play_count, starred):
 	now = datetime.now(tz=ZoneInfo("America/New_York"))
 	today = now.strftime("%Y-%m-%d")
-	if mediatype == typeEnum["song"]:
+	if media_type == typeEnum["song"]:
+		cur = con.execute("INSERT INTO tracked_songs (song_id, user_id, play_count, starred) VALUES (?, ?, ?, ?)", (media_id, user_id, play_count, starred))
+	elif media_type == typeEnum["album"]:
+		cur = con.execute("INSERT INTO tracked_albums (album_id, user_id, play_count, starred) VALUES (?, ?, ?, ?)", (media_id, user_id, play_count, starred))
+	elif media_type == typeEnum["artist"]:
+		cur = con.execute("INSERT INTO tracked_artists (artist_id, user_id, play_count, starred) VALUES (?, ?, ?, ?)", (media_id, user_id, play_count, starred))
+	con.commit()
+
+def update_play_count(con, media_id, user_id, media_type, newval, starred):
+	if media_type == typeEnum["song"]:
+		cur = con.execute("UPDATE tracked_songs SET play_count=? WHERE song_id=? AND user_id=?", (newval, media_id, user_id))
+		cur = con.execute("UPDATE tracked_songs SET starred=? WHERE song_id=? AND user_id=?", (starred, media_id, user_id))
+	elif media_type == typeEnum["album"]:
+		cur = con.execute("UPDATE tracked_albums SET play_count=? WHERE album_id=? AND user_id=?", (newval, media_id, user_id))
+		cur = con.execute("UPDATE tracked_albums SET starred=? WHERE album_id=? AND user_id=?", (starred, media_id, user_id))
+	elif media_type == typeEnum["artist"]:
+		cur = con.execute("UPDATE tracked_artists SET play_count=? WHERE artist_id=? AND user_id=?", (newval, media_id, user_id))
+		cur = con.execute("UPDATE tracked_artists SET starred=? WHERE artist_id=? AND user_id=?", (starred, media_id, user_id))
+	con.commit()
+
+def update_play_increase(con, media_id, user_id, media_type, newval):
+	now = datetime.now(tz=ZoneInfo("America/New_York"))
+	today = now.strftime("%Y-%m-%d")
+	if media_type == typeEnum["song"]:
 		cur = con.execute("SELECT play_increase FROM media_plays WHERE media_id=? AND user_id=? AND date=?", (media_id, user_id, today))
 		fetch = cur.fetchall()
 		if len(fetch) == 1:
@@ -188,6 +272,17 @@ def update_play_increase(con, media_id, user_id, mediatype, newval):
 		elif len(fetch) == 0:
 			cur = con.execute("INSERT INTO media_plays \
 				(media_id, media_type, user_id, date, play_increase) VALUES (?, 'media_file', ?, ?, ?)", (media_id, user_id, today, newval))
+		else:
+			printBoth("Too many ")
+	elif media_type == typeEnum["album"]:
+		cur = con.execute("SELECT play_increase FROM media_plays WHERE media_id=? AND user_id=? AND date=? AND media_type='album'", (media_id, user_id, today))
+		fetch = cur.fetchall()
+		if len(fetch) == 1:
+			inc = fetch[0][0] + newval
+			cur = con.execute("UPDATE media_plays SET play_increase=? WHERE media_id=? AND user_id=? AND date=? AND media_type='album'", (inc, media_id, user_id, today))
+		elif len(fetch) == 0:
+			cur = con.execute("INSERT INTO media_plays \
+				(media_id, media_type, user_id, date, play_increase) VALUES (?, 'album', ?, ?, ?)", (media_id, user_id, today, newval))
 		else:
 			printBoth("Too many ")
 		#cur = con.execute("UPDATE media_plays SET play_increase=? WHERE id=? AND user_id=? AND date=?")
