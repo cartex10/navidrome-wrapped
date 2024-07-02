@@ -109,16 +109,16 @@ def full_db_sync(con):
 
 def check_for_db_changes(con):
 	# Complete multiple sql inner joins to check for updated metadata from media_file (navidrome.db) in all_media (wrapped.db)
-	joinClauses = [{"updated_value": "Genre", "sql": "o.genre != n.genre AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
-	{"updated_value": "Track Number", "sql": "o.track_number != n.track_number AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.path = n.path"},
-	{"updated_value": "Artist", "sql": "o.artist_id != n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
-	{"updated_value": "Album", "sql": "o.album_id != n.album_id AND o.artist_id = n.artist_id AND o.track_number = n.track_number AND o.genre = n.genre"},
-	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"},
+	joinClauses = [{"updated_value": "Genre", "sql": "o.genre != n.genre AND o.title = n.title AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
+	{"updated_value": "Track Number", "sql": "o.track_number != n.track_number AND o.title = n.title AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.path = n.path"},
+	{"updated_value": "Artist", "sql": "o.artist_id != n.artist_id AND o.title = n.title AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
+	{"updated_value": "Album", "sql": "o.album_id != n.album_id AND o.title = n.title AND o.artist_id = n.artist_id AND o.track_number = n.track_number AND o.genre = n.genre"},
+	{"updated_value": "Path", "sql": "o.path != n.path AND o.title = n.title AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"},
 	{"updated_value": "Title", "sql": "o.title != n.title AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path AND o.genre = n.genre"} ]
 	# ADD TITLE ?
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
-		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON o.title = n.title AND " + jc["sql"] + ";")
+		cur = con.execute("SELECT o.song_id, n.id FROM navidromeDB.media_file n INNER JOIN all_media o ON " + jc["sql"] + ";")
 		fetch = cur.fetchall()
 		if len(fetch) > 0:
 			for i in fetch:
@@ -150,7 +150,8 @@ def check_for_db_changes(con):
 				elif jc["updated_value"] == "Title":
 					# Updated path (same title/artist/album/track_number)
 					update_db(con, i[0], mediaDBEnum["title"], meta["title"])
-				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
+				if i[0] != i[1]:
+					update_db(con, i[0], mediaDBEnum["song_id"], i[1])
 	# Check for new media files
 	cur = con.execute("SELECT n.id, o.song_id, n.album_id, n.artist_id, n.path, n.title, n.album, n.artist, n.track_number, n.created_at, n.genre FROM navidromeDB.media_file n LEFT JOIN all_media o ON o.album_id = n.album_id AND o.title = n.title AND o.artist_id = n.artist_id AND o.path = n.path AND o.track_number = n.track_number")
 	count = 0
