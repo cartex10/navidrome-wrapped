@@ -7,6 +7,7 @@ from pathlib import Path
 wrappedDBPath = "db/wrapped.db"
 wrappedLogPath = "db/wrapped.log"
 navidromeDBPath = "navidrome/navidrome.db"
+ERROR_IDS = []
 
 class mediaDBEnum(Enum):
 	song_id = 0, 
@@ -112,7 +113,8 @@ def check_for_db_changes(con):
 	{"updated_value": "Track Number", "sql": "o.track_number != n.track_number AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.path = n.path"},
 	{"updated_value": "Artist", "sql": "o.artist_id != n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path"},
 	{"updated_value": "Album", "sql": "o.album_id != n.album_id AND o.artist_id = n.artist_id AND o.track_number = n.track_number AND o.genre = n.genre"},
-	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"} ]
+	{"updated_value": "Path", "sql": "o.path != n.path AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number"},
+	{"updated_value": "Title", "sql": "o.title != n.title AND o.artist_id = n.artist_id AND o.album_id = n.album_id AND o.track_number = n.track_number AND o.path = n.path AND o.genre = n.genre"} ]
 	# ADD TITLE ?
 	for jc in joinClauses:
 		# joins tables with following conditions + A.song_id != B.song_id to check for updated song metadata
@@ -145,6 +147,9 @@ def check_for_db_changes(con):
 				elif jc["updated_value"] == "Path":
 					# Updated path (same title/artist/album/track_number)
 					update_db(con, i[0], mediaDBEnum["path"], meta["path"])
+				elif jc["updated_value"] == "Title":
+					# Updated path (same title/artist/album/track_number)
+					update_db(con, i[0], mediaDBEnum["title"], meta["title"])
 				update_db(con, i[0], mediaDBEnum["song_id"], i[1])
 	# Check for new media files
 	cur = con.execute("SELECT n.id, o.song_id, n.album_id, n.artist_id, n.path, n.title, n.album, n.artist, n.track_number, n.created_at, n.genre FROM navidromeDB.media_file n LEFT JOIN all_media o ON o.album_id = n.album_id AND o.title = n.title AND o.artist_id = n.artist_id AND o.path = n.path AND o.track_number = n.track_number")
@@ -155,7 +160,9 @@ def check_for_db_changes(con):
 				insert_media_entry(con, i[0], i[2], i[3], i[4], i[5], i[6], i[7], i[8], i[9].split('T')[0], i[10])
 				count += 1
 		except:
-			printBoth("Failed to add new song to all_media\n" + stringMetadata(con, i[0], 1))
+			if not i[0] in ERROR_IDS:
+				printBoth("Failed to add new song to all_media\n" + stringMetadata(con, i[0], 1))
+				ERROR_IDS.append(i[0])
 	if count > 0:
 		printBoth(str(count) + " new media file(s) found.\n")
 	
