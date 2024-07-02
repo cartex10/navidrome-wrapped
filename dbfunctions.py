@@ -340,6 +340,14 @@ def sync_song_ID(con, oldval, newval):
 		string = "Sync ID of song in tracked_songs table\n\t["
 		string += oldval + "] OLD\n\n\t[" + newval + "] NEW\n\n"
 		printBoth(string)
+	# Sync media_plays table
+	cur = con.execute("SELECT media_id FROM media_plays WHERE media_id=?", (oldval,))
+	if len(cur.fetchall()) > 0:
+		cur = con.execute("UPDATE media_plays SET media_id=? WHERE media_id=?", (newval, oldval))
+		con.commit()
+		string = "Sync ID of song in media_plays table\n\t["
+		string += oldval + "] OLD\n\n\t[" + newval + "] NEW\n\n"
+		printBoth(string)
 
 def read_mediafile_table(con):
 	cur = con.execute("SELECT \
